@@ -36,3 +36,4 @@ jobs:
           echo Add other actions to build,
           echo test, and deploy your project.
           echo Add secret value ${{ secrets.TESTPASSWORD }} to build,
+          echo another test coz of new push
