@@ -1,0 +1,134 @@
+name: Final Project Workflow
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate-and-push:
+    runs-on: self-hosted #ubuntu-latest
+    environment: devops-training
+
+    steps:
+    # Step 1: Checkout the repository
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Step 2: Log in to Docker Hub
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ vars.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    # Step 3: Debug Dockerfile presence (helpful for debugging)
+    - name: Debug Dockerfile presence
+      run: |
+        echo "Listing files in the flask-app directory:"
+        ls -al ./flask-app  # List files in the 'flask-app' directory
+
+    # Step 4: Build and Tag Docker Image
+    - name: Build and Tag Docker Image
+      run: |
+        # Build the Docker image
+        docker build -f ./flask-app/Dockerfile \
+          -t "${{ vars.DOCKER_USERNAME }}/${{ vars.IMAGE_NAME }}:${{ vars.IMAGE_TAG }}" ./flask-app
+
+    # Step 5: Push to Docker Hub
+    - name: Push to Docker Hub
+      run: |
+        docker push "${{ vars.DOCKER_USERNAME }}/${{ vars.IMAGE_NAME }}:${{ vars.IMAGE_TAG }}"
+
+  test-running-ontainer:
+    runs-on: self-hosted
+    needs: validate-and-push
+    environment: devops-training
+    
+    services:
+      docker:
+        image: docker:24-dind
+        options: --privileged
+        ports:
+          - 2376:2376
+        env:
+          DOCKER_TLS_CERTDIR: /certs
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+
+    steps:
+    # Step 1: Checkout the repository
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Step 2: Log in to Docker Hub
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ vars.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    # Step 3: Run ephemeral container with --rm flag
+    - name: Run ephemeral container
+      run: |
+        echo "Starting ephemeral container..."
+        CONTAINER_ID=$(docker run -d --rm -p 5000:5000 \
+          "${{ vars.DOCKER_USERNAME }}/${{ vars.IMAGE_NAME }}:${{ vars.IMAGE_TAG }}")
+        echo "Container started with ID: $CONTAINER_ID"
+        
+        # Wait for container to be ready
+        echo "Waiting for container to be ready..."
+        sleep 10
+        
+        # Store container ID for cleanup
+        echo "CONTAINER_ID=$CONTAINER_ID" >> $GITHUB_ENV
+
+    # Step 4: Test with curl
+    - name: Test application with curl
+      run: |
+        echo "Testing application with curl..."
+        
+        # # Test the health endpoint or main endpoint
+        # for i in {1..5}; do
+        #   if curl -f -s http://localhost:5000/; then
+        #     echo "✅ Application is responding correctly"
+        #     curl -v http://localhost:5000/
+        #     break
+        #   else
+        #     echo "⏳ Attempt $i failed, retrying in 5 seconds..."
+        #     sleep 5
+        #   fi
+        # done
+        
+        # Additional test - check if we get expected response
+        RESPONSE=$(curl -s http://localhost:5000/ || echo "FAILED")
+        if [[ "$RESPONSE" != "FAILED" ]]; then
+          echo "✅ Successfully received response: $RESPONSE"
+        else
+          echo "❌ Failed to get response from application"
+          exit 1
+        fi
+
+    # Step 5: Stop and cleanup container
+    - name: Stop and cleanup container
+      if: always()
+      run: |
+        echo "Cleaning up container..."
+        
+        # Stop the container (--rm flag will automatically remove it)
+        if [[ -n "${{ env.CONTAINER_ID }}" ]]; then
+          echo "Stopping container: ${{ env.CONTAINER_ID }}"
+          docker stop "${{ env.CONTAINER_ID }}" || echo "Container may have already stopped"
+        fi
+        
+        # Additional cleanup - remove any dangling containers/images
+        echo "Removing dangling containers and images..."
+        docker container prune -f || true
+        docker image prune -f || true
+        
+        echo "✅ Cleanup completed"
+
+
