@@ -75,7 +75,7 @@ jobs:
     - name: Run ephemeral container
       run: |
         echo "Starting ephemeral container..."
-        CONTAINER_ID=$(docker run -d --rm -p 5000:5000 \
+        CONTAINER_ID=$(docker run -d --rm -p 5555:5555 \
           "${{ vars.DOCKER_USERNAME }}/${{ vars.IMAGE_NAME }}:${{ vars.IMAGE_TAG }}")
         echo "Container started with ID: $CONTAINER_ID"
         
@@ -93,9 +93,9 @@ jobs:
         
         # # Test the health endpoint or main endpoint
         # for i in {1..5}; do
-        #   if curl -f -s http://localhost:5000/; then
+        #   if curl -f -s http://localhost:5555/; then
         #     echo "✅ Application is responding correctly"
-        #     curl -v http://localhost:5000/
+        #     curl -v http://localhost:5555/
         #     break
         #   else
         #     echo "⏳ Attempt $i failed, retrying in 5 seconds..."
@@ -104,7 +104,7 @@ jobs:
         # done
         
         # Additional test - check if we get expected response
-        RESPONSE=$(curl -s http://localhost:5000/ || echo "FAILED")
+        RESPONSE=$(curl -s http://localhost:5555/ || echo "FAILED")
         if [[ "$RESPONSE" != "FAILED" ]]; then
           echo "✅ Successfully received response: $RESPONSE"
         else
@@ -130,5 +130,3 @@ jobs:
         docker image prune -f || true
         
         echo "✅ Cleanup completed"
-
-
